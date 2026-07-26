@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLayout';
-import { SettingsSection, SETTINGS_CUSTOM_TRIGGER_CLASS } from '@/components/sections/shared/SettingsSection';
+import { SettingsFieldRow, SettingsSection, SETTINGS_CUSTOM_TRIGGER_CLASS } from '@/components/sections/shared/SettingsSection';
 import { SettingsInfoHint } from '@/components/sections/shared/SettingsInfoHint';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { useConfigStore } from '@/stores/useConfigStore';
@@ -72,6 +72,13 @@ interface ProviderSources {
   user: ProviderSourceInfo;
   project: ProviderSourceInfo;
   custom?: ProviderSourceInfo;
+}
+
+interface GoMultiAuthAccount {
+  index: number;
+  label: string;
+  isCurrent: boolean;
+  hasKey: boolean;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -172,6 +179,11 @@ export const ProvidersPage: React.FC = () => {
   const [providerDropdownOpen, setProviderDropdownOpen] = React.useState(false);
   const [providerSources, setProviderSources] = React.useState<Record<string, ProviderSources>>({});
   const [showAuthPanel, setShowAuthPanel] = React.useState(false);
+  const [goAccounts, setGoAccounts] = React.useState<GoMultiAuthAccount[]>([]);
+  const [goAccountsLoading, setGoAccountsLoading] = React.useState(false);
+  const [goAccountLabel, setGoAccountLabel] = React.useState('');
+  const [goAccountKey, setGoAccountKey] = React.useState('');
+  const [goMultiAuthBusy, setGoMultiAuthBusy] = React.useState<string | null>(null);
   const isAddMode = selectedProviderId === ADD_PROVIDER_ID;
 
   React.useEffect(() => {
@@ -329,6 +341,45 @@ export const ProvidersPage: React.FC = () => {
 
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId);
   const selectedSources = selectedProviderId ? providerSources[selectedProviderId] : undefined;
+  const isOpenCodeGoProvider = selectedProvider?.id === 'opencode-go';
+  const isGoMultiAuthBusy = Boolean(goMultiAuthBusy);
+
+  const loadGoAccounts = React.useCallback(async () => {
+    setGoAccountsLoading(true);
+    try {
+      const response = await runtimeFetch('/api/opencode/go-multi-auth/accounts', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(isRecord(payload) && typeof payload.error === 'string' ? payload.error : t('settings.providers.page.goMultiAuth.toast.loadFailed'));
+      }
+
+      const accounts = isRecord(payload) && Array.isArray(payload.accounts)
+        ? payload.accounts.filter((account): account is GoMultiAuthAccount => (
+            isRecord(account)
+            && typeof account.index === 'number'
+            && typeof account.label === 'string'
+            && typeof account.isCurrent === 'boolean'
+            && typeof account.hasKey === 'boolean'
+          ))
+        : [];
+      setGoAccounts(accounts);
+    } catch (error) {
+      console.error('Failed to load OpenCode Go accounts:', error);
+      toast.error(t('settings.providers.page.goMultiAuth.toast.loadFailed'));
+    } finally {
+      setGoAccountsLoading(false);
+    }
+  }, [t]);
+
+  React.useEffect(() => {
+    if (!isOpenCodeGoProvider) {
+      return;
+    }
+    void loadGoAccounts();
+  }, [isOpenCodeGoProvider, loadGoAccounts]);
 
   const handleSaveApiKey = async (providerId: string) => {
     const apiKey = apiKeyInputs[providerId]?.trim() ?? '';
@@ -496,6 +547,96 @@ export const ProvidersPage: React.FC = () => {
       toast.error(t('settings.providers.page.toast.providerDisconnectFailed'));
     } finally {
       setAuthBusyKey(null);
+    }
+  };
+
+  const showGoMultiAuthReloadStatus = (payload: unknown) => {
+    if (!isRecord(payload)) {
+      return;
+    }
+    if (typeof payload.restartError === 'string') {
+      toast.error(t('settings.providers.page.goMultiAuth.toast.restartFailed'));
+    } else if (payload.external === true) {
+      toast.message(t('settings.providers.page.goMultiAuth.toast.externalRestartRequired'));
+    }
+  };
+
+  const handleAddGoAccount = async () => {
+    const apiKey = goAccountKey.trim();
+    if (!apiKey) {
+      toast.error(t('settings.providers.page.goMultiAuth.toast.apiKeyRequired'));
+      return;
+    }
+
+    setGoMultiAuthBusy('add');
+    try {
+      const response = await runtimeFetch('/api/opencode/go-multi-auth/accounts', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, label: goAccountLabel.trim() || undefined }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(isRecord(payload) && typeof payload.error === 'string' ? payload.error : t('settings.providers.page.goMultiAuth.toast.addFailed'));
+      }
+
+      setGoAccountKey('');
+      setGoAccountLabel('');
+      toast.success(t('settings.providers.page.goMultiAuth.toast.added'));
+      showGoMultiAuthReloadStatus(payload);
+      await loadGoAccounts();
+    } catch (error) {
+      console.error('Failed to add OpenCode Go account:', error);
+      toast.error(t('settings.providers.page.goMultiAuth.toast.addFailed'));
+    } finally {
+      setGoMultiAuthBusy(null);
+    }
+  };
+
+  const handleSwitchGoAccount = async () => {
+    setGoMultiAuthBusy('switch');
+    try {
+      const response = await runtimeFetch('/api/opencode/go-multi-auth/switch', {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(isRecord(payload) && typeof payload.error === 'string' ? payload.error : t('settings.providers.page.goMultiAuth.toast.switchFailed'));
+      }
+
+      toast.success(t('settings.providers.page.goMultiAuth.toast.switched'));
+      showGoMultiAuthReloadStatus(payload);
+      await loadGoAccounts();
+    } catch (error) {
+      console.error('Failed to switch OpenCode Go account:', error);
+      toast.error(t('settings.providers.page.goMultiAuth.toast.switchFailed'));
+    } finally {
+      setGoMultiAuthBusy(null);
+    }
+  };
+
+  const handleRemoveGoAccount = async (index: number) => {
+    const busyKey = `remove:${index}`;
+    setGoMultiAuthBusy(busyKey);
+    try {
+      const response = await runtimeFetch(`/api/opencode/go-multi-auth/accounts/${index}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(isRecord(payload) && typeof payload.error === 'string' ? payload.error : t('settings.providers.page.goMultiAuth.toast.removeFailed'));
+      }
+
+      toast.success(t('settings.providers.page.goMultiAuth.toast.removed'));
+      showGoMultiAuthReloadStatus(payload);
+      await loadGoAccounts();
+    } catch (error) {
+      console.error('Failed to remove OpenCode Go account:', error);
+      toast.error(t('settings.providers.page.goMultiAuth.toast.removeFailed'));
+    } finally {
+      setGoMultiAuthBusy(null);
     }
   };
 
@@ -915,6 +1056,92 @@ export const ProvidersPage: React.FC = () => {
               </div>
             )}
       </SettingsSection>
+
+
+      {isOpenCodeGoProvider ? (
+        <SettingsSection
+          title={t('settings.providers.page.goMultiAuth.title')}
+          info={t('settings.providers.page.goMultiAuth.description')}
+          settingsItem="providers.go-multi-auth"
+          headerAction={(
+            <Button
+              variant="outline"
+              size="xs"
+              className="!font-normal"
+              onClick={handleSwitchGoAccount}
+              disabled={goAccountsLoading || goAccounts.length < 2 || isGoMultiAuthBusy}
+            >
+              {goMultiAuthBusy === 'switch' ? t('settings.providers.page.goMultiAuth.actions.switching') : t('settings.providers.page.goMultiAuth.actions.switch')}
+            </Button>
+          )}
+        >
+          <div className="space-y-4">
+            {goAccountsLoading ? (
+              <p className="typography-meta text-muted-foreground">{t('settings.providers.page.state.loading')}</p>
+            ) : goAccounts.length === 0 ? (
+              <p className="typography-meta text-muted-foreground">{t('settings.providers.page.goMultiAuth.empty')}</p>
+            ) : (
+              <div className="divide-y divide-[var(--surface-subtle)]">
+                {goAccounts.map((account) => (
+                  <div key={account.index} className="flex items-center justify-between gap-3 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      {account.isCurrent ? <Icon name="check" className="h-4 w-4 shrink-0 text-[var(--status-success)]" /> : <span className="h-4 w-4 shrink-0" />}
+                      <div className="min-w-0">
+                        <div className="truncate typography-ui-label text-foreground">{account.label}</div>
+                        {account.isCurrent ? (
+                          <div className="typography-micro text-muted-foreground">{t('settings.providers.page.goMultiAuth.current')}</div>
+                        ) : null}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="!font-normal text-[var(--status-error)] hover:text-[var(--status-error)]"
+                      onClick={() => handleRemoveGoAccount(account.index)}
+                      disabled={isGoMultiAuthBusy}
+                    >
+                      {goMultiAuthBusy === `remove:${account.index}` ? t('settings.providers.page.goMultiAuth.actions.removing') : t('settings.providers.page.goMultiAuth.actions.remove')}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <SettingsFieldRow
+              label={t('settings.providers.page.goMultiAuth.addAccountLabel')}
+              info={t('settings.providers.page.goMultiAuth.addAccountInfo')}
+              alignEnd={false}
+              controlClassName="flex-col items-stretch @xl:flex-row @xl:items-center"
+            >
+              <Input
+                value={goAccountLabel}
+                onChange={(event) => setGoAccountLabel(event.target.value)}
+                placeholder={t('settings.providers.page.goMultiAuth.labelPlaceholder')}
+                aria-label={t('settings.providers.page.goMultiAuth.labelLabel')}
+                className="h-8 @xl:max-w-40"
+                disabled={isGoMultiAuthBusy}
+              />
+              <Input
+                type="password"
+                value={goAccountKey}
+                onChange={(event) => setGoAccountKey(event.target.value)}
+                placeholder={t('settings.providers.page.goMultiAuth.apiKeyPlaceholder')}
+                aria-label={t('settings.providers.page.goMultiAuth.apiKeyLabel')}
+                className="h-8 flex-1 font-mono text-xs"
+                disabled={isGoMultiAuthBusy}
+              />
+              <Button
+                size="xs"
+                className="!font-normal shrink-0"
+                onClick={handleAddGoAccount}
+                disabled={isGoMultiAuthBusy}
+              >
+                {goMultiAuthBusy === 'add' ? t('settings.providers.page.goMultiAuth.actions.adding') : t('settings.providers.page.goMultiAuth.actions.add')}
+              </Button>
+            </SettingsFieldRow>
+          </div>
+        </SettingsSection>
+      ) : null}
 
 
       <SettingsSection

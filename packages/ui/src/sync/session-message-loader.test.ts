@@ -172,4 +172,28 @@ describe("SessionMessageLoader", () => {
     loader.dispose()
     childStores.disposeAll()
   })
+
+  test("configure reactivates a disposed loader", async () => {
+    let calls = 0
+    const messages = async ({ sessionID }: { sessionID: string }) => {
+      calls += 1
+      return response([createRecord(sessionID)])
+    }
+    const { childStores, loader } = createLoader(messages)
+    const target = { directory: "/repo", sessionID: "session-a" }
+
+    loader.dispose()
+    loader.configure({
+      sdk: { session: { messages } } as unknown as OpencodeClient,
+      runtimeKey: "runtime-a",
+    })
+
+    await loader.ensure(target)
+
+    expect(calls).toBe(1)
+    expect(loader.getSnapshot(target).status).toBe("ready")
+    expect(childStores.getChild(target.directory)?.getState().message[target.sessionID]?.length).toBe(1)
+    loader.dispose()
+    childStores.disposeAll()
+  })
 })

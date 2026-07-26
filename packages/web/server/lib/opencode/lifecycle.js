@@ -40,6 +40,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
     getManagedOpenCodeShellEnvSnapshot,
     getManagedOpenCodeEnv = async () => ({}),
     getActiveSessionCount = () => 0,
+    applyGoMultiAuthToAuth = () => null,
   } = deps;
 
   const killProcessOnPort = (port) => {
@@ -475,6 +476,10 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
     await applyOpencodeBinaryFromSettings({ strict: true });
     ensureOpencodeCliEnv();
     const openCodePassword = await ensureLocalOpenCodeServerPassword({ rotateManaged: true });
+    const goAccountLabel = applyGoMultiAuthToAuth();
+    if (goAccountLabel) {
+      console.log(`[go-multi-auth] using OpenCode Go account: ${goAccountLabel}`);
+    }
     let envPath = process.env.PATH;
     if (typeof buildManagedOpenCodePath === 'function') {
       envPath = buildManagedOpenCodePath();

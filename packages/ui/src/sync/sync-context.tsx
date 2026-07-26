@@ -1811,6 +1811,7 @@ export function SyncProvider(props: {
   const lastChildDiscoveryAtByDirectoryRef = useRef(new Map<string, number>())
   const resyncingDirectoriesRef = useRef(new Set<string>())
   const statusPollingDirectoriesRef = useRef(new Set<string>())
+  const disposalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pipelineReconnectRef = useRef<((reason?: string) => void) | null>(null)
   const pipelineHasConnectedRef = useRef(false)
   const pipelineDisconnectedBeforeFirstConnectRef = useRef(false)
@@ -2260,9 +2261,21 @@ export function SyncProvider(props: {
     }
   }, [props.sdk, props.directory, childStores, messageLoader, routingIndex])
 
-  useEffect(() => () => {
-    messageLoader.dispose()
-    childStores.disposeAll()
+  useEffect(() => {
+    if (disposalTimerRef.current) {
+      clearTimeout(disposalTimerRef.current)
+      disposalTimerRef.current = null
+    }
+
+    return () => {
+      const timer = setTimeout(() => {
+        if (disposalTimerRef.current !== timer) return
+        disposalTimerRef.current = null
+        messageLoader.dispose()
+        childStores.disposeAll()
+      }, 0)
+      disposalTimerRef.current = timer
+    }
   }, [childStores, messageLoader])
 
   // Subscribe to child store for streaming state derivation

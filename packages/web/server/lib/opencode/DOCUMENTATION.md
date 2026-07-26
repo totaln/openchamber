@@ -7,6 +7,7 @@ This module provides OpenCode server integration utilities for the web server ru
 - `packages/web/server/lib/opencode/index.js`: public entrypoint (currently baseline placeholder).
 - `packages/web/server/lib/opencode/auth.js`: provider authentication file operations.
 - `packages/web/server/lib/opencode/auth-state-runtime.js`: managed OpenCode server auth password/header runtime.
+- `packages/web/server/lib/opencode/go-multi-auth.js`: OpenCode Go account storage, active-account application to OpenCode auth, and account rotation helpers.
 - `packages/web/server/lib/opencode/cli-options.js`: CLI/environment option parsing for server startup arguments.
 - `packages/web/server/lib/opencode/cli-entry-runtime.js`: CLI entrypoint runtime that detects direct execution, parses CLI options, and starts server bootstrap.
 - `packages/web/server/lib/opencode/routes.js`: OpenCode/provider settings and auth-related route registration.
@@ -77,6 +78,10 @@ This module provides OpenCode server integration utilities for the web server ru
   - `GET /api/config/opencode-resolution`
   - `POST /api/opencode/upgrade` (proxies OpenCode upgrade, then restarts managed OpenCode so the new binary is active)
   - `GET /api/opencode/upgrade-status`
+  - `GET /api/opencode/go-multi-auth/accounts`
+  - `POST /api/opencode/go-multi-auth/accounts`
+  - `DELETE /api/opencode/go-multi-auth/accounts/:index`
+  - `POST /api/opencode/go-multi-auth/switch`
   - `POST /api/opencode/directory`
   - `GET /api/provider/:providerId/source`
   - `DELETE /api/provider/:providerId/auth`
@@ -368,6 +373,7 @@ an authoritative loopback callback URL even when OpenChamber binds port `0`.
 
 ## Storage and configuration
 - Provider auth: `~/.local/share/opencode/auth.json`.
+- OpenCode Go account switcher secrets: `~/.config/opencode/opencode-go-accounts.json` with owner-only file permissions; only the active account key is copied into OpenCode's provider auth entry.
 - User config: `~/.config/opencode/opencode.json`.
 - Project config: `<workingDirectory>/.opencode/opencode.json` or `opencode.json`.
 - Custom config: `OPENCODE_CONFIG` env var path.

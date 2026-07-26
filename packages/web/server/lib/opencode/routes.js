@@ -571,4 +571,93 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       return res.status(500).json({ error: error.message || 'Failed to write AGENTS.md' });
     }
   });
+
+  const getGoMultiAuth = async () => import('./go-multi-auth.js');
+
+  const refreshAfterGoMultiAuthChange = async (reason) => {
+    try {
+      return await refreshOpenCodeAfterConfigChange(reason);
+    } catch (error) {
+      return {
+        reloaded: false,
+        external: false,
+        restartError: error instanceof Error ? error.message : 'Failed to restart OpenCode',
+      };
+    }
+  };
+
+  app.get('/api/opencode/go-multi-auth/accounts', async (_req, res) => {
+    try {
+      const { listAccounts, loadAccounts } = await getGoMultiAuth();
+      const data = loadAccounts();
+      return res.json({
+        accounts: listAccounts(),
+        total: data.accounts.length,
+        activeIndex: data.activeIndex,
+      });
+    } catch (error) {
+      console.error('Failed to list OpenCode Go accounts:', error);
+      return res.status(500).json({ error: error.message || 'Failed to list OpenCode Go accounts' });
+    }
+  });
+
+  app.post('/api/opencode/go-multi-auth/accounts', async (req, res) => {
+    try {
+      const apiKey = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : '';
+      const label = typeof req.body?.label === 'string' ? req.body.label.trim() : '';
+      if (!apiKey) {
+        return res.status(400).json({ error: 'API key is required' });
+      }
+
+      const { addAccount, applyActiveAccountToAuth } = await getGoMultiAuth();
+      const result = addAccount(apiKey, label || undefined);
+      const activeLabel = result.total === 1 ? applyActiveAccountToAuth() : null;
+      const reload = activeLabel
+        ? await refreshAfterGoMultiAuthChange('OpenCode Go account added')
+        : { reloaded: false, external: false };
+      return res.json({ success: true, ...result, activeLabel, ...reload });
+    } catch (error) {
+      console.error('Failed to add OpenCode Go account:', error);
+      return res.status(500).json({ error: error.message || 'Failed to add OpenCode Go account' });
+    }
+  });
+
+  app.delete('/api/opencode/go-multi-auth/accounts/:index', async (req, res) => {
+    try {
+      const index = Number.parseInt(req.params.index, 10);
+      if (!Number.isInteger(index)) {
+        return res.status(400).json({ error: 'Invalid account index' });
+      }
+
+      const { removeAccount } = await getGoMultiAuth();
+      const result = removeAccount(index);
+      if (!result.removed) {
+        return res.status(404).json({ error: 'Account not found' });
+      }
+
+      const reload = result.authChanged
+        ? await refreshAfterGoMultiAuthChange('OpenCode Go account removed')
+        : { reloaded: false, external: false };
+      return res.json({ success: true, ...result, ...reload });
+    } catch (error) {
+      console.error('Failed to remove OpenCode Go account:', error);
+      return res.status(500).json({ error: error.message || 'Failed to remove OpenCode Go account' });
+    }
+  });
+
+  app.post('/api/opencode/go-multi-auth/switch', async (_req, res) => {
+    try {
+      const { switchToNext } = await getGoMultiAuth();
+      const result = switchToNext();
+      if (!result) {
+        return res.status(400).json({ error: 'Need at least 2 accounts to switch' });
+      }
+
+      const reload = await refreshAfterGoMultiAuthChange('OpenCode Go account switched');
+      return res.json({ success: true, ...result, ...reload });
+    } catch (error) {
+      console.error('Failed to switch OpenCode Go account:', error);
+      return res.status(500).json({ error: error.message || 'Failed to switch OpenCode Go account' });
+    }
+  });
 };

@@ -51,6 +51,7 @@ import { isMobileSurfaceRuntime } from '@/lib/runtimeSurface';
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { getEmbeddedSessionChatOriginSessionId } from '@/components/layout/contextPanelEmbeddedChat';
 import { isFullySyntheticMessage } from '@/lib/messages/synthetic';
+import { parseRoute } from '@/lib/router';
 import { normalizeUserDisplayParts } from './message/normalizeUserDisplayParts';
 import { findShellCommandForMessage, isUserShellMarkerMessage } from './lib/shellBridge';
 
@@ -541,7 +542,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ active = true, aut
     const syncDirectory = useSyncDirectory();
     const effectiveSessionDirectory = currentSessionDirectory ?? syncDirectory;
     const ensureSessionRenderable = React.useCallback(
-        (sessionId: string) => sync.ensureSessionRenderable(sessionId, false, effectiveSessionDirectory),
+        (sessionId: string, force = false) => sync.ensureSessionRenderable(sessionId, force, effectiveSessionDirectory),
         [effectiveSessionDirectory, sync],
     );
     const loadMoreMessages = React.useCallback(
@@ -753,9 +754,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ active = true, aut
     }, []);
 
     React.useEffect(() => {
-        if (autoOpenDraft && !currentSessionId && !draftOpen) {
-            openNewSessionDraft();
-        }
+        if (!autoOpenDraft || currentSessionId || draftOpen) return;
+        if (useSessionUIStore.getState().currentSessionId || parseRoute().sessionId) return;
+        openNewSessionDraft();
     }, [autoOpenDraft, currentSessionId, draftOpen, openNewSessionDraft]);
 
     const activeTurnChangeRef = React.useRef<(turnId: string | null) => void>(() => {});
@@ -971,9 +972,18 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ active = true, aut
 
     React.useEffect(() => {
         if (!active || !currentSessionId) return;
-        if (hasRenderableSessionSnapshot) return;
-        void ensureSessionRenderable(currentSessionId);
-    }, [active, currentSessionId, ensureSessionRenderable, hasRenderableSessionSnapshot]);
+        const needsLoad = !hasRenderableSessionSnapshot || (sessionMessageCount === 0 && !sessionMessageLoadState.resolved);
+        if (!needsLoad) return;
+        const forceEmptyUnresolvedLoad = sessionMessageCount === 0 && !sessionMessageLoadState.resolved;
+        if (sessionMessageLoadState.status === 'loading') {
+            const timer = window.setTimeout(() => {
+                if (useSessionUIStore.getState().currentSessionId !== currentSessionId) return;
+                void ensureSessionRenderable(currentSessionId, forceEmptyUnresolvedLoad);
+            }, 750);
+            return () => window.clearTimeout(timer);
+        }
+        void ensureSessionRenderable(currentSessionId, forceEmptyUnresolvedLoad);
+    }, [active, currentSessionId, ensureSessionRenderable, hasRenderableSessionSnapshot, sessionMessageCount, sessionMessageLoadState.resolved, sessionMessageLoadState.status]);
 
 	if (!currentSessionId && !draftOpen) {
 		// With auto-open, the draft welcome opens on the next tick (effect below),

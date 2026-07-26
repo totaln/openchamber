@@ -743,6 +743,12 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     keywords: ['config', 'source', 'disconnect'],
   },
   {
+    id: 'providers.go-multi-auth',
+    page: 'providers',
+    titleKey: 'settings.providers.page.goMultiAuth.title',
+    keywords: ['opencode go', 'account', 'accounts', 'switch', 'api key'],
+  },
+  {
     id: 'providers.models',
     page: 'providers',
     titleKey: 'settings.providers.page.models.title',

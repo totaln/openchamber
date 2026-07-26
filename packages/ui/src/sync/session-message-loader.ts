@@ -135,9 +135,11 @@ export class SessionMessageLoader {
   }
 
   configure(configuration: LoaderConfiguration): void {
-    if (this.sdk === configuration.sdk && this.runtimeKey === configuration.runtimeKey) return
+    const wasDisposed = this.disposed
+    if (this.sdk === configuration.sdk && this.runtimeKey === configuration.runtimeKey && !wasDisposed) return
     const runtimeChanged = this.runtimeKey !== configuration.runtimeKey
     const previousRuntimeKey = this.runtimeKey
+    this.disposed = false
     this.sdk = configuration.sdk
     this.runtimeKey = configuration.runtimeKey
     this.sdkEpoch += 1

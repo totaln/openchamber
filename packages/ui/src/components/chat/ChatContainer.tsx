@@ -43,6 +43,7 @@ import {
     useScopedBlockingPermissions,
     useScopedBlockingQuestions,
     useParentSession,
+    useSession,
 } from '@/sync/sync-context';
 import { useSync } from '@/sync/use-sync';
 import { usePlanDetection } from '@/hooks/usePlanDetection';
@@ -54,6 +55,7 @@ import { isFullySyntheticMessage } from '@/lib/messages/synthetic';
 import { parseRoute } from '@/lib/router';
 import { normalizeUserDisplayParts } from './message/normalizeUserDisplayParts';
 import { findShellCommandForMessage, isUserShellMarkerMessage } from './lib/shellBridge';
+import { resolveChatPromptReadOnly } from './chatPromptReadOnly';
 
 const EMPTY_MESSAGES: Array<{ info: Message; parts: Part[] }> = [];
 const IDLE_SESSION_STATUS = { type: 'idle' as const };
@@ -680,6 +682,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ active = true, aut
     const isDesktopExpandedInput = isExpandedInput;
     const useCompactDraftLayout = isMobile || isVSCode || chatSurfaceMode === 'mini-chat';
     const messageListRef = React.useRef<MessageListHandle | null>(null);
+    const currentSession = useSession(currentSessionId, effectiveSessionDirectory);
     const parentSession = useParentSession(currentSessionId, effectiveSessionDirectory);
 
     // In the embedded session-chat iframe, hide "Return to parent" when
@@ -713,7 +716,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ active = true, aut
             {t('chat.container.returnToParent.label')}
         </Button>
     ) : null;
-    const promptReadOnly = parentSession ? !allowPromptingSubagentSessions : readOnly;
+    const promptReadOnly = resolveChatPromptReadOnly(currentSession, allowPromptingSubagentSessions, readOnly);
 
     React.useEffect(() => {
         // VS Code/Cursor/Positron webviews delete window.parent (and window.top).
@@ -1005,7 +1008,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ active = true, aut
 			// No transform on this root: it would become the containing block for
 			// the fullscreen composer's position:fixed visual-viewport pinning in
 			// mobile browsers (see ChatInput's composerFormRef effect).
-			<div className="relative flex h-full flex-col bg-background">
+			<div data-composer-bound className="relative flex h-full flex-col bg-background">
 				{useCompactDraftLayout && !isDesktopExpandedInput ? <DraftWelcome /> : null}
 				<div
 					className={cn(
@@ -1030,7 +1033,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ active = true, aut
 	if (isSessionHydrating && sessionMessages.length === 0 && !sessionIsWorking) {
 		if (sessionMessageLoadState.status === 'error') {
 			return (
-				<div className="relative flex h-full flex-col bg-background">
+				<div data-composer-bound className="relative flex h-full flex-col bg-background">
 					{returnToParentButton}
 					<div className="flex min-h-0 flex-1 items-center justify-center px-6">
 						<div className="max-w-sm text-center">
@@ -1051,7 +1054,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ active = true, aut
 			);
 		}
 		return (
-			<div className="relative flex flex-col h-full bg-background">
+			<div data-composer-bound className="relative flex flex-col h-full bg-background">
 				{returnToParentButton}
 				<div
 					className={cn(
@@ -1109,7 +1112,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ active = true, aut
 		return (
 			// No transform here either — same fixed-positioning constraint as the
 			// draft branch above.
-			<div className="relative flex flex-col h-full bg-background">
+			<div data-composer-bound className="relative flex flex-col h-full bg-background">
 				{returnToParentButton}
 				<div
 					className={cn(
@@ -1141,7 +1144,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ active = true, aut
     }
 
 	return (
-		<div className="relative flex flex-col h-full bg-background">
+		<div data-composer-bound className="relative flex flex-col h-full bg-background">
 			{returnToParentButton}
 			<ChatViewport
 				currentSessionId={currentSessionId}

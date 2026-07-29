@@ -626,7 +626,7 @@ describe("optimisticSend target directory", () => {
     expect(currentStore.getState().session_status["session-new"]).toBe(undefined)
   })
 
-  test("commits the new branch locally when sending after a revert", async () => {
+  test("commits the new branch locally and discards its optimistic shadow when sending after a revert", async () => {
     const retainedMessage = { id: "msg_1", role: "user", sessionID: "session-reverted" } as Message
     const revertedMessage = { id: "msg_2", role: "user", sessionID: "session-reverted" } as Message
     const targetStore = createStore({}, {
@@ -636,18 +636,21 @@ describe("optimisticSend target directory", () => {
     })
     const childStores = createChildStores([["/target/project", targetStore]])
     let optimisticMessage: Message | null = null
+    const optimisticShadow = new Set([revertedMessage.id])
 
     const { optimisticSend, setActionRefs, setOptimisticRefs } = await import("./session-actions")
     setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/target/project")
     setOptimisticRefs(
       (input) => {
         optimisticMessage = input.message
+        optimisticShadow.add(input.message.id)
         targetStore.setState((state) => ({
           message: { ...state.message, [input.sessionID]: [...(state.message[input.sessionID] ?? []), input.message] },
           part: { ...state.part, [input.message.id]: input.parts },
         }))
       },
       () => {},
+      (input) => optimisticShadow.delete(input.messageID),
     )
 
     await optimisticSend({
@@ -665,6 +668,8 @@ describe("optimisticSend target directory", () => {
       (optimisticMessage as unknown as Message).id,
     ])
     expect(targetStore.getState().part.msg_2).toBe(undefined)
+    expect(optimisticShadow.has(revertedMessage.id)).toBe(false)
+    expect(optimisticShadow.has((optimisticMessage as unknown as Message).id)).toBe(true)
   })
 
   test("restores the reverted branch when sending fails", async () => {

@@ -40,6 +40,13 @@ type OpenAiUsagePayload = {
     balance?: number | string;
     unlimited?: boolean;
   };
+  spend_control?: {
+    individual_limit?: {
+      limit?: number | string;
+      used?: number | string;
+      used_percent?: number | string;
+    };
+  };
 };
 
 type GoogleModelsPayload = {
@@ -553,6 +560,20 @@ const fetchCodexQuota = async (): Promise<ProviderResult> => {
           : null;
       windows.credits_balance = toUsageWindow({
         usedPercent: null,
+        windowSeconds: null,
+        resetAt: null,
+        valueLabel,
+      });
+    }
+    if (payload?.spend_control?.individual_limit) {
+      const spendLimit = payload.spend_control.individual_limit;
+      const used = toNumber(spendLimit.used);
+      const limit = toNumber(spendLimit.limit);
+      const valueLabel = used !== null && limit !== null
+        ? `${used.toFixed(0)} / ${limit.toFixed(0)} used`
+        : null;
+      windows.credits = toUsageWindow({
+        usedPercent: toNumber(spendLimit.used_percent),
         windowSeconds: null,
         resetAt: null,
         valueLabel,

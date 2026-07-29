@@ -145,6 +145,7 @@ export type DesktopSettings = {
   inputSpellcheckEnabled?: boolean;
   showOpenCodeUpdateNotifications?: boolean;
   agentControlToolEnabled?: boolean;
+  optimizeSystemPrompt?: boolean;
   openCodeUpdateToastDismissedVersion?: string;
   showToolFileIcons?: boolean;
   codeBlockLineWrap?: boolean;
@@ -934,11 +935,6 @@ export const fetchDesktopInstalledApps = async (
 ): Promise<FetchDesktopInstalledAppsResult> => {
   if (!hasDesktopInvoke() || !isDesktopLocalOriginActive()) {
     return { apps: [], success: false, hasCache: false, isCacheStale: false };
-  }
-
-  // Linux desktop does not resolve installed GUI apps; skip the IPC round-trip.
-  if (getElectronPlatform() === 'linux') {
-    return { apps: [], success: true, hasCache: false, isCacheStale: false };
   }
 
   const candidate = Array.isArray(apps) ? apps.filter((value) => typeof value === 'string') : [];

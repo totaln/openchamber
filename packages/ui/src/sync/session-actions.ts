@@ -937,6 +937,17 @@ export async function optimisticSend(input: {
     const part = { ...stateBeforeSend.part }
     for (const revertedMessage of revertedMessages) delete part[revertedMessage.id]
     store.setState({ session, message, part })
+
+    // A server-backed user message can still remain in the loader's optimistic
+    // shadow until a page fetch confirms it. Forget the reverted branch there
+    // too, or the next tail refresh will merge those deleted messages back in.
+    for (const revertedMessage of revertedMessages) {
+      _optimisticConfirm?.({
+        sessionID: input.sessionId,
+        directory: targetDirectory,
+        messageID: revertedMessage.id,
+      })
+    }
   }
 
   const messageID = ascendingId("msg")

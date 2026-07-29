@@ -7,6 +7,7 @@ import fs from 'node:fs';
 // configured and proceed straight to fetch.
 const ORIGINAL_FS = { ...fs };
 const AUTH = JSON.stringify({
+  openai: { access: 'test-token' },
   crof: { key: 'test-token' },
   neuralwatt: { key: 'test-token' },
 });
@@ -109,6 +110,31 @@ describe('Crof quota provider (VS Code parity)', () => {
 
     assert.equal(result.ok, false);
     assert.equal(result.error, 'Invalid response from provider');
+  });
+});
+
+describe('Codex quota provider (VS Code parity)', () => {
+  test('surfaces spend_control individual limit for business accounts', async () => {
+    stubFetchReturning(() => Promise.resolve(mockResponse({
+      plan_type: 'business',
+      rate_limit: null,
+      credits: { has_credits: true, unlimited: false, balance: null },
+      spend_control: {
+        individual_limit: {
+          limit: '7500',
+          used: '2674.8724080324173',
+          remaining: '4825.127591967583',
+          used_percent: 36,
+          remaining_percent: 64,
+        },
+      },
+    })));
+
+    const result = await fetchQuotaForProvider('codex');
+
+    assert.equal(result.ok, true);
+    assert.equal(result.usage!.windows.credits!.usedPercent, 36);
+    assert.equal(result.usage!.windows.credits!.valueLabel, '2675 / 7500 used');
   });
 });
 

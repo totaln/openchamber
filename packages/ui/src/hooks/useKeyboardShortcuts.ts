@@ -16,6 +16,7 @@ import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { getCycledPrimaryAgentName } from '@/components/chat/mobileControlsUtils';
 import { focusChatInput } from '@/components/chat/composer/editor/dom';
+import { hasOpenDropdown } from './keyboard-shortcut-dom';
 
 export const useKeyboardShortcuts = () => {
   const openNewSessionDraft = useSessionUIStore((s) => s.openNewSessionDraft);
@@ -91,13 +92,6 @@ export const useKeyboardShortcuts = () => {
 
     const isDropdownEventTarget = (target: EventTarget | null) => {
       return target instanceof Element && Boolean(target.closest(dropdownTargetSelector));
-    };
-
-    const hasOpenDropdown = () => {
-      const openDropdowns = document.querySelectorAll<HTMLElement>(
-        '[data-slot="dropdown-menu-content"], [data-slot="select-content"], [role="listbox"], [role="menu"], [data-radix-popper-content-wrapper]'
-      );
-      return Array.from(openDropdowns).some((element) => element.getClientRects().length > 0);
     };
 
     const handleTerminalShortcutCapture = (e: KeyboardEvent) => {
